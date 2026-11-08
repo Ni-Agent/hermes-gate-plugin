@@ -179,6 +179,8 @@ python3 -m unittest discover -s tests -v
 GATE_TEST_BIN_DIR=/path/to/built/gate-binaries python3 -m unittest discover -s tests -v
 # Against an actual Hermes source checkout, using its Python environment:
 PYTHONPATH=/path/to/hermes-agent python tests/native_loader_check.py
+# Also exercise the native installer/scan in a fresh temporary profile:
+PYTHONPATH=/path/to/hermes-agent python tests/native_install_check.py
 ```
 
 Contract checked against Hermes commit
