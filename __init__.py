@@ -13,11 +13,11 @@ def register(ctx):
         )
 
     def client():
-        from agent.secret_scope import get_secret
+        from gateway.platforms._shared import get_scoped_secret
 
         return Client(
-            ctx.get_config("url", "") or get_secret("GATE_URL") or "",
-            get_secret("GATE_TOKEN") or "",
+            ctx.get_config("url", "") or get_scoped_secret("GATE_URL") or "",
+            get_scoped_secret("GATE_TOKEN") or "",
         )
 
     worker_run = os.environ.get("GATE_WORKER_RUN_ID", "")
@@ -220,7 +220,7 @@ def register(ctx):
         name="gate",
         label="Gate",
         adapter_factory=factory,
-        check_fn=configured,
+        check_fn=lambda: True,
         validate_config=configured,
         required_env=["GATE_URL", "GATE_TOKEN"],
         env_enablement_fn=lambda: {"configured": True} if configured() else None,

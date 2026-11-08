@@ -21,7 +21,7 @@ hermes gate status
 For a supplied Git bundle, clone it to a local repository first:
 
 ```sh
-git clone /absolute/path/to/hermes-gate-0.1.0-beta.2.bundle "$HOME/hermes-gate-plugin"
+git clone /absolute/path/to/hermes-gate-0.1.0-beta.3.bundle "$HOME/hermes-gate-plugin"
 hermes plugins install "file://$HOME/hermes-gate-plugin"
 hermes gateway restart
 ```

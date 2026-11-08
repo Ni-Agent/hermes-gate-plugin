@@ -73,7 +73,11 @@ else:
     )
     worker.chmod(0o700)
     os.environ["PATH"] = str(fakebin) + os.pathsep + os.environ["PATH"]
-    from agent.secret_scope import set_secret_scope, reset_secret_scope
+    from agent.secret_scope import (
+        set_secret_scope,
+        reset_secret_scope,
+        set_multiplex_active,
+    )
 
     scope = set_secret_scope(
         {"GATE_URL": fixture.url, "GATE_TOKEN": fixture.token}, profile_home=str(home)
@@ -132,6 +136,12 @@ else:
         await adapter.disconnect()
         assert not adapter._thread.is_alive()
         assert listener_status(adapter._directory)["state"] == "stopped"
+        # GatewayRunner enables multiplexing after loading configuration. Its primary
+        # adapter is then probed without a turn/profile scope: mirror that transition.
+        reset_secret_scope(scope)
+        scope = None
+        os.environ["GATE_TOKEN"] = fixture.token
+        set_multiplex_active(True)
         offline = await asyncio.to_thread(fixture.create, "Offline gateway task")
         adapter2 = platform_registry.create_adapter("gate", config.platforms[platform])
         created.append(adapter2)
@@ -188,7 +198,9 @@ else:
         for adapter in created:
             await adapter.disconnect()
         manager.unload()
-        reset_secret_scope(scope)
+        if scope is not None:
+            reset_secret_scope(scope)
+        set_multiplex_active(False)
 
 
 if __name__ == "__main__":

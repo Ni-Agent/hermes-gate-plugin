@@ -1,4 +1,4 @@
-"""Native beta1-to-beta2 updater check against Hermes on PYTHONPATH. No model calls."""
+"""Native beta1-to-current updater check against Hermes on PYTHONPATH. No model calls."""
 
 import os, pathlib, subprocess, tempfile
 
@@ -41,7 +41,13 @@ with tempfile.TemporaryDirectory(prefix="gate-native-upgrade-") as tmp:
     from hermes_cli.plugins_cmd_update import cmd_update
 
     cmd_update("gate", interactive=False)
-    assert "0.1.0-beta.2" in (target / "plugin.yaml").read_text()
+    from ruamel.yaml import YAML
+
+    expected = YAML(typ="safe").load((source / "plugin.yaml").read_text())["version"]
+    assert (
+        YAML(typ="safe").load((target / "plugin.yaml").read_text())["version"]
+        == expected
+    )
     assert (home / ".env").read_bytes() == before
     assert (target / "user-settings.txt").read_text() == "keep me"
-    print("PASS: native beta1-to-beta2 update preserves credentials and user files")
+    print("PASS: native beta1-to-current update preserves credentials and user files")

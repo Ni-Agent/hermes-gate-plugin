@@ -81,3 +81,20 @@ https://hermes-agent.nousresearch.com/docs/developer-guide/adding-platform-adapt
 Deferred: hosting Gate in Hermes, public admin dashboard/usage, permissions,
 message delivery, more scheduling features, orphaned external-run reconciliation.
 Gate server API/storage are unchanged by this plugin release.
+
+## Beta3 startup correction
+
+The user reported `Platform Gate requirements not met` after beta2's real gateway
+restart, while the CLI authenticated successfully. Reproduced the failure against
+the installed v0.23.0 source: load configuration, then enable multiplexing as
+GatewayRunner does, and probe/create the primary adapter without a turn secret
+scope. Beta2's plain `get_secret` raises in that context and `configured()` masks
+it as a failed requirements probe. The earlier native test kept a profile scope
+bound throughout and missed the transition.
+
+Use Hermes's adapter-native `get_scoped_secret`, which retains scoped-profile
+isolation and handles the unscoped launch profile. Keep the stdlib dependency
+probe independent from credential validation. The regression now covers both the
+scoped profile with a deliberately wrong process token and the actual unscoped
+multiplex primary startup, including task execution and reconnect. No credential
+rotation, server change or Hermes core update is needed.
