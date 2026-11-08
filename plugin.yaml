@@ -1,0 +1,26 @@
+name: gate
+version: "0.1.0-beta.1"
+manifest_version: 2
+api_version: 1
+description: Shared Gate knowledge, always-on context and outbound task events.
+license: MIT
+provides_tools: [gate_read, gate_write, gate_status]
+provides_hooks: [pre_llm_call]
+requires_env:
+  - name: GATE_URL
+    description: "Your Gate HTTPS origin, supplied by its operator (no /mcp suffix)."
+  - name: GATE_TOKEN
+    description: "Your dedicated agent token, issued by the Gate operator."
+    secret: true
+config_schema:
+  workspace:
+    type: str
+    description: "Working directory for isolated task workers; defaults to the listener's directory."
+  worker_timeout:
+    type: int
+    default: 1800
+    description: "Maximum seconds per task worker; interrupted work requires review."
+  orientation:
+    type: str
+    default: /kb/agents/orientation
+    description: "Small KB orientation note, fetched once at session start."
