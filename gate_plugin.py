@@ -491,7 +491,11 @@ class Runtime:
 
     def frame(self, kind, cursor, event):
         if kind == "task":
-            self.inbox.accept(cursor, [event["task_id"]])
+            eligible = (
+                event.get("responsible") == self.identity
+                and event.get("status") in READY
+            )
+            self.inbox.accept(cursor, [event["task_id"]] if eligible else [])
         elif kind in ("ready", "reset"):
             # One reconciliation at connection/recovery, never a periodic scan.
             result = self.client.request(

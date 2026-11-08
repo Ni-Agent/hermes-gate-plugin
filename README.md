@@ -43,11 +43,18 @@ Requires Linux, Python 3.11+, a configured Hermes model/provider, and Hermes wit
 native `register_system_prompt_section` support. Restart existing Hermes sessions
 after installing. The plugin has no third-party Python dependencies.
 
-For a source checkout (or a locally supplied Git bundle):
+For a source checkout:
 
 ```sh
 hermes plugins install file:///absolute/path/to/hermes-gate-plugin
-# Or: hermes plugins install file:///absolute/path/to/hermes-gate-0.1.0-beta.1.bundle
+```
+
+For a supplied Git bundle, clone it first using its local path (Git does not
+accept `file://` bundle URLs), then install the resulting repository:
+
+```sh
+git clone /absolute/path/to/hermes-gate-0.1.0-beta.1.bundle "$HOME/hermes-gate-plugin"
+hermes plugins install "file://$HOME/hermes-gate-plugin"
 ```
 
 Hermes runs its normal source scan and asks whether to enable the plugin. It asks
