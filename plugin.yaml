@@ -1,8 +1,9 @@
 name: gate
-version: "0.1.0-beta.1"
+version: "0.1.0-beta.2"
+kind: standalone
 manifest_version: 2
 api_version: 1
-description: Shared Gate knowledge, always-on context and outbound task events.
+description: Shared knowledge and assigned tasks through Gate.
 license: MIT
 provides_tools: [gate_read, gate_write, gate_status]
 provides_hooks: [pre_llm_call]
@@ -15,7 +16,7 @@ requires_env:
 config_schema:
   workspace:
     type: str
-    description: "Working directory for isolated task workers; defaults to the listener's directory."
+    description: "Workspace for Gate tasks."
   worker_timeout:
     type: int
     default: 1800

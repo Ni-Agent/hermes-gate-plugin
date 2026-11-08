@@ -1,11 +1,13 @@
 """Native Hermes client plugin. Gate runs separately; this package hosts no server."""
 
-import argparse, contextlib, json, os, pathlib, signal, threading
-from .gate_plugin import Client, GateError, PROMPT, Runtime
+import json, os, pathlib, weakref
+from .gate_plugin import Client, GateError, PROMPT, Runtime, listener_status
 
 
 def register(ctx):
-    if not hasattr(ctx, "register_system_prompt_section"):
+    if not hasattr(ctx, "register_system_prompt_section") or not hasattr(
+        ctx, "register_platform"
+    ):
         raise RuntimeError(
             "Gate needs Hermes with register_system_prompt_section support. Update Hermes first."
         )
@@ -120,7 +122,7 @@ def register(ctx):
                     "identity": who["identity"],
                     "server_version": health["version"],
                     "url": c.url,
-                    "listener": "Run hermes gate listen, or enable the user service. No polling.",
+                    "listener": listener_status(directory),
                 }
             )
         except GateError as exc:
@@ -169,31 +171,75 @@ def register(ctx):
     # Capture the profile-owned path while Hermes's profile scope is active.
     directory = pathlib.Path(ctx.state.data_dir)
     profile_home = directory.parent.parent
-    active = []
+    adapters = weakref.WeakSet()
+
+    def configured(config=None):
+        try:
+            client()
+            return True
+        except (ValueError, RuntimeError):
+            return False
+
+    def factory(config):
+        from .gateway_adapter import GateAdapter
+
+        def runtime_factory(on_state):
+            from tools.environments.local import served_profile_child_env
+
+            c = client()
+            c.timeout = (
+                2  # Bounded background requests keep gateway shutdown responsive.
+            )
+            workspace = (
+                pathlib.Path(
+                    ctx.get_config("workspace", str(profile_home / "gate-work"))
+                )
+                .expanduser()
+                .resolve()
+            )
+            workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
+            child_env = served_profile_child_env(
+                target_home=profile_home, inherit_credentials=True
+            )
+            child_env.update(GATE_URL=c.url, GATE_TOKEN=c.token)
+            return Runtime(
+                c,
+                directory,
+                profile_home,
+                workspace,
+                int(ctx.get_config("worker_timeout", 1800)),
+                on_state=on_state,
+                child_env=child_env,
+            )
+
+        adapter = GateAdapter(config, runtime_factory, directory)
+        adapters.add(adapter)
+        return adapter
+
+    ctx.register_platform(
+        name="gate",
+        label="Gate",
+        adapter_factory=factory,
+        check_fn=configured,
+        validate_config=configured,
+        required_env=["GATE_URL", "GATE_TOKEN"],
+        env_enablement_fn=lambda: {"configured": True} if configured() else None,
+        is_connected=configured,
+        config_connected_fn=configured,
+        shared_env_prefixes=("GATE_",),
+    )
 
     def cleanup():
-        for runtime in active:
-            runtime.stop()
+        for adapter in list(adapters):
+            adapter.close_from_plugin()
 
     ctx.on_unload(cleanup)
 
     def cli_setup(parser):
         sub = parser.add_subparsers(dest="gate_action", required=True)
-        sub.add_parser(
-            "status", help="Check server and local inbox without starting work"
-        )
-        sub.add_parser(
-            "listen",
-            help="Maintain outbound SSE; run assigned tasks in isolated Hermes sessions",
-        )
-        resume = sub.add_parser(
-            "resume", help="Explicitly resume a reviewed uncertain task run"
-        )
+        sub.add_parser("status", help="Show Gate connection and task pickup status")
+        resume = sub.add_parser("resume", help="Resume a reviewed interrupted task")
         resume.add_argument("task_id")
-        service = sub.add_parser(
-            "install-service",
-            help="Write a systemd user unit; review it and enable it yourself",
-        )
 
     def cli(args):
         if args.gate_action == "status":
@@ -216,86 +262,20 @@ def register(ctx):
                         )
                     )
             return
-        if args.gate_action == "install-service":
-            import shutil
-
-            exe = shutil.which("hermes")
-            if not exe:
-                raise RuntimeError("hermes executable not found")
-
-            # systemd unit quoting is not shell quoting. Refuse line/control expansion.
-            def quote(value):
-                if "\n" in value or "\r" in value:
-                    raise ValueError("invalid service path")
-                return (
-                    '"'
-                    + value.replace("\\", "\\\\")
-                    .replace('"', '\\"')
-                    .replace("%", "%%")
-                    .replace("$", "$$")
-                    + '"'
-                )
-
-            unit = pathlib.Path.home() / ".config/systemd/user/hermes-gate.service"
-            unit.parent.mkdir(parents=True, exist_ok=True)
-            if unit.exists():
-                raise RuntimeError("User unit already exists; refusing to overwrite")
-            workspace = ctx.get_config("workspace", os.getcwd())
-            text = (
-                "[Unit]\nDescription=Hermes Gate task event listener\nAfter=network-online.target\n\n[Service]\nType=simple\nEnvironment="
-                + quote("HERMES_HOME=" + str(profile_home))
-                + "\nWorkingDirectory="
-                + quote(workspace)
-                + "\nExecStart="
-                + quote(exe)
-                + " gate listen\nRestart=on-failure\nRestartSec=5\nUMask=0077\n\n[Install]\nWantedBy=default.target\n"
-            )
-            with unit.open("x") as f:
-                f.write(text)
-            print(
-                "Wrote "
-                + str(unit)
-                + ". Review it, then run: systemctl --user daemon-reload && systemctl --user enable --now hermes-gate.service"
-            )
-            return
         c = client()
-        workspace = ctx.get_config("workspace", os.getcwd())
         runtime = Runtime(
             c,
             directory,
             profile_home,
-            workspace,
-            int(ctx.get_config("worker_timeout", 1800)),
+            ctx.get_config("workspace", str(profile_home / "gate-work")),
         )
-        active.append(runtime)
-        if args.gate_action == "resume":
-            try:
-                runtime.inbox.resume(args.task_id)
-                print("Run queued for explicit recovery. Start hermes gate listen.")
-            finally:
-                runtime.stop()
-                active.remove(runtime)
-            return
-        previous = {}
-
-        def stop(signum, frame):
-            runtime.stop_event.set()
-            runtime.wake.set()
-
-        if threading.current_thread() is threading.main_thread():
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                previous[sig] = signal.signal(sig, stop)
         try:
-            runtime.listen()
+            runtime.inbox.resume(args.task_id)
+            print("Task queued. Start the Hermes gateway to resume it.")
         finally:
             runtime.stop()
-            active.remove(runtime)
-            for sig, old in previous.items():
-                signal.signal(sig, old)
 
-    ctx.register_cli_command(
-        "gate", "Gate KB, event listener and assigned workers", cli_setup, cli
-    )
+    ctx.register_cli_command("gate", "Gate connection and task status", cli_setup, cli)
     ctx.register_command(
         "gate", lambda raw: status(), description="Gate connection and identity status"
     )

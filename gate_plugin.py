@@ -53,6 +53,7 @@ class Client:
         if not token or "\n" in token or "\r" in token:
             raise ValueError("Missing or invalid Gate credential")
         self.token = token
+        self._stream_connection = None
         self.timeout = timeout
         self.opener = urllib.request.build_opener(NoRedirect())
 
@@ -115,11 +116,12 @@ class Client:
         p = urllib.parse.urlsplit(self.url)
         connection = (
             http.client.HTTPSConnection(
-                p.hostname, p.port, timeout=45, context=ssl.create_default_context()
+                p.hostname, p.port, timeout=2, context=ssl.create_default_context()
             )
             if p.scheme == "https"
-            else http.client.HTTPConnection(p.hostname, p.port, timeout=45)
+            else http.client.HTTPConnection(p.hostname, p.port, timeout=2)
         )
+        self._stream_connection = connection
         connection.request(
             "GET",
             "/events",
@@ -134,7 +136,15 @@ class Client:
             response.read(4096)
             connection.close()
             raise GateError(response.status, "stream rejected")
+        if connection.sock:
+            connection.sock.settimeout(45)
         return Stream(connection, response)
+
+    def interrupt_stream(self):
+        connection = self._stream_connection
+        if connection and connection.sock:
+            with contextlib.suppress(OSError):
+                connection.sock.shutdown(socket.SHUT_RDWR)
 
     def task(self, task_id):
         if not re.fullmatch("[a-f0-9]{24}", task_id):
@@ -320,6 +330,8 @@ class Runtime:
         workspace,
         worker_timeout=1800,
         launcher=None,
+        on_state=None,
+        child_env=None,
     ):
         self.client = client
         self.directory = pathlib.Path(directory)
@@ -348,6 +360,12 @@ class Runtime:
         self.thread = None
         self.connected = False
         self.error = None
+        self.on_state = on_state
+        self.child_env = child_env
+
+    def publish_state(self):
+        if self.on_state:
+            self.on_state(self.connected, self.error)
 
     def launch(self, task_id, run_id):
         binary = shutil.which("hermes")
@@ -363,7 +381,7 @@ class Runtime:
             "Perform the work under normal approvals. Save a verified outcome in the task description; set done or blocked honestly. "
             "Use gate_read and gate_write; do not expose credentials. Do not start another listener."
         )
-        env = os.environ.copy()
+        env = dict(self.child_env) if self.child_env is not None else os.environ.copy()
         env["HERMES_HOME"] = self.profile_home
         env["GATE_WORKER_RUN_ID"] = run_id
         env["GATE_WORKER_TASK_ID"] = task_id
@@ -404,16 +422,18 @@ class Runtime:
                         if self.stop_event.is_set():
                             kill()
                             try:
-                                return process.wait(timeout=5)
+                                return process.wait(timeout=0.5)
                             except subprocess.TimeoutExpired:
                                 with contextlib.suppress(ProcessLookupError):
                                     os.killpg(process.pid, signal.SIGKILL)
-                                return process.wait(timeout=5)
+                                return process.wait(timeout=0.5)
             finally:
                 timer.cancel()
 
     def handle(self, row):
         task_id, stage, run_id, expected = row
+        if self.stop_event.is_set():
+            return
         try:
             if stage == "queued":
                 task, etag = self.client.task(task_id)
@@ -423,6 +443,8 @@ class Runtime:
                 self.inbox.stage(task_id, "claiming", etag)
                 expected = etag
                 stage = "claiming"
+            if self.stop_event.is_set():
+                return
             if stage == "claiming":
                 # Exact retry survives a lost HTTP response or plugin restart.
                 self.client.request(
@@ -433,6 +455,8 @@ class Runtime:
                     "hermes-claim-" + run_id,
                 )
                 self.inbox.stage(task_id, "claimed")
+            if self.stop_event.is_set():
+                return
             task, _ = self.client.task(task_id)
             if (
                 task["responsible"] != self.identity
@@ -443,8 +467,17 @@ class Runtime:
                     task_id, "done" if task["status"] in TERMINAL else "skipped"
                 )
                 return
+            if self.stop_event.is_set():
+                return
             self.inbox.stage(task_id, "running")
             code = self.launcher(task_id, run_id)
+            if self.stop_event.is_set():
+                self.inbox.stage(
+                    task_id,
+                    "uncertain",
+                    detail="Execution interrupted; inspect before resuming",
+                )
+                return
             task, _ = self.client.task(task_id)
             if task.get("run_id") == run_id and task["status"] in TERMINAL:
                 self.inbox.stage(task_id, "done", detail="Worker exit " + str(code))
@@ -523,6 +556,7 @@ class Runtime:
                             raise GateError(502, "Expected SSE")
                         self.connected = True
                         self.error = None
+                        self.publish_state()
                         delay = 1
                         for kind, cursor, event in frames(response, self.stop_event):
                             if self.stop_event.is_set():
@@ -534,6 +568,7 @@ class Runtime:
                         log.warning("Gate stream reconnecting: %s", self.error)
                 finally:
                     self.connected = False
+                    self.publish_state()
                     self.response = None
                 if not self.stop_event.is_set():
                     self.stop_event.wait(delay)
@@ -541,17 +576,42 @@ class Runtime:
         finally:
             self.stop()
 
-    def stop(self):
+    def request_stop(self):
         self.stop_event.set()
         self.wake.set()
+        interrupt = getattr(self.client, "interrupt_stream", None)
+        if interrupt:
+            interrupt()
+
+    def stop(self):
+        self.request_stop()
         if self.response:
             with contextlib.suppress(Exception):
                 self.response.close()
         if self.thread and self.thread is not threading.current_thread():
-            self.thread.join(timeout=12)
+            self.thread.join(timeout=3)
         if self.thread and self.thread.is_alive():
             return  # Keep the ownership lock until the worker really stops.
         with contextlib.suppress(Exception):
             self.inbox.db.close()
         if not self.lock.closed:
             self.lock.close()
+
+
+def listener_status(directory):
+    """Read observed state only while a live runtime owns its profile lock."""
+    directory = pathlib.Path(directory)
+    try:
+        with open(directory / "listener.lock", "r") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                try:
+                    return json.loads((directory / "listener.json").read_text())
+                except (OSError, ValueError):
+                    return {"state": "starting"}
+            else:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+    except FileNotFoundError:
+        pass
+    return {"state": "stopped"}

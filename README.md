@@ -1,24 +1,111 @@
-# Hermes Gate plugin — 0.1.0-beta.1
+# Gate for Hermes
 
-A native Hermes client for an already running Gate. Shared KB context is always
-available; an optional outbound SSE listener picks up assigned tasks. No polling,
-no inbound port, and no Gate server embedded in Hermes.
+Shared project knowledge and assigned tasks in Hermes. Gate context and tools are
+available in your sessions. Your Hermes gateway picks up tasks assigned to your
+agent and records their results in Gate.
 
-## Operator handoff
+## Connect
 
-The Gate operator supplies:
+Get your **Gate URL** and a dedicated **agent token** from your Gate administrator.
+Install and enable this plugin using Hermes's plugin installer. It prompts for
+both values and saves them in the selected profile. The token field is masked.
 
-- **Gate URL**, an HTTPS origin, for example `https://gate.example.org` (no `/mcp`).
-- **Dedicated agent token**, issued for an identity such as `agent:hermes-home`.
+For a source checkout:
 
-The token is a long-lived machine credential, not the ChatGPT OAuth password.
-Hermes sends `Authorization: Bearer …` on REST and SSE requests. ChatGPT continues
-using Gate's separate OAuth flow. All Gate identities currently have equal data
-access; separate tokens identify agents and can be revoked independently. Treat
-a token as access to the entire Gate KB and tasks. Do not put it in a task, chat,
-repository or shell command line.
+```sh
+hermes plugins install file:///absolute/path/to/hermes-gate-plugin
+hermes gateway restart
+hermes gate status
+```
 
-On the Gate server, an OS administrator runs:
+For a supplied Git bundle, clone it to a local repository first:
+
+```sh
+git clone /absolute/path/to/hermes-gate-0.1.0-beta.2.bundle "$HOME/hermes-gate-plugin"
+hermes plugins install "file://$HOME/hermes-gate-plugin"
+hermes gateway restart
+```
+
+If Hermes has no gateway installed yet, run `hermes gateway setup`. Use
+`hermes gateway start` to start an already configured gateway that is stopped.
+
+Requires Linux, Python 3.11+, and Hermes Agent v0.23.0. Tested against stable
+commit `2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19`. Your Hermes model/provider must
+already be configured. Existing sessions should be restarted to load new tools.
+
+## Use
+
+Ask Hermes to read a project from Gate. You can also use `gate_read`, `gate_write`
+and `gate_status` directly. Assign a task to the identity reported by
+`hermes gate status`, with status `open` or `ready`. Keep the gateway running to
+receive assignments. The task will show its progress and outcome in Gate.
+
+Tasks use the selected profile's tools, credentials and approval settings. Work
+needing an interactive approval may need your attention. Review results before
+relying on changes to other systems.
+
+By default, task files go under the profile's `gate-work` directory. To choose a
+workspace or task time limit, add these settings to Hermes config.yaml, preserving
+your other configuration:
+
+```yaml
+plugins:
+  enabled: [gate]
+  entries:
+    gate:
+      settings:
+        workspace: /home/hermes/work
+        worker_timeout: 1800
+```
+
+If your profile restricts toolsets, include `gate`. To stop automatic pickup while
+retaining the Gate tools, disable its gateway platform:
+
+```yaml
+gateway:
+  platforms:
+    gate:
+      enabled: false
+```
+
+Then restart the gateway. Closing a chat does not stop task pickup.
+
+## Status and recovery
+
+`hermes gate status` shows the authenticated identity, server version, connection
+and local task outcomes. For gateway logs, use `hermes logs --follow`. Private
+worker logs are stored under the profile's `plugin-data` directory.
+
+An interrupted task can require review. Inspect its Gate record, worker log and
+any changes already made. After deciding that resuming is safe:
+
+```sh
+hermes gateway stop
+hermes gate resume TASK_ID
+hermes gateway start
+```
+
+Resuming starts a new session for the same task run. Previous actions are not
+undone, and previous conversation transcripts are not restored automatically.
+
+## Upgrade from beta1
+
+Keep the existing profile and credentials. Stop the previous `hermes gate listen`
+process before updating. If you enabled beta1's separate user service, stop and
+disable it once:
+
+```sh
+systemctl --user disable --now hermes-gate.service
+```
+
+Update/reinstall the plugin and restart the Hermes gateway. Existing tasks and
+reconnect state are retained. Beta2 has no separate Gate service to register.
+Do not delete the plugin's data directory during the upgrade.
+
+## Gate administration
+
+The Gate administrator chooses the HTTPS URL during server setup and issues a
+separate token for each agent. On the Gate host:
 
 ```sh
 sudo gate-admin -url https://gate.example.org \
@@ -26,178 +113,13 @@ sudo gate-admin -url https://gate.example.org \
 sudo systemctl restart gate
 ```
 
-The command registers the identity, writes the raw token to that private file,
-and stores only its hash in the credential list. It prints no secret. The operator
-transfers the token privately; Hermes's installer asks for it with masked input.
-Token metadata can be listed with `sudo gate-admin -action list-tokens`; revoke
-with `sudo gate-admin -action revoke-token -token-id ID` and restart Gate. Current
-connections close on restart and reconnect with their persisted cursors.
+Transfer the token privately. The command prints the output file path, not the
+secret. List token IDs using `sudo gate-admin -action list-tokens`. Revoke one with
+`sudo gate-admin -action revoke-token -token-id ID` and restart Gate.
 
-**Admin authentication for this release is SSH/OS access plus sudo.** There is no
-public admin HTTP endpoint, extra admin password, usage dashboard, or permissions
-matrix. Creating an ordinary Gate identity does not grant token-minting access.
+Current Gate identities have equal data access. Agent tokens provide access to the
+KB and tasks; keep them out of chats and repositories. Administration uses the
+host's existing SSH/sudo access. ChatGPT's OAuth login is separate from an agent token.
 
-## Install
-
-Requires Linux, Python 3.11+, a configured Hermes model/provider, and Hermes with
-native `register_system_prompt_section` support. Restart existing Hermes sessions
-after installing. The plugin has no third-party Python dependencies.
-
-For a source checkout:
-
-```sh
-hermes plugins install file:///absolute/path/to/hermes-gate-plugin
-```
-
-For a supplied Git bundle, clone it first using its local path (Git does not
-accept `file://` bundle URLs), then install the resulting repository:
-
-```sh
-git clone /absolute/path/to/hermes-gate-0.1.0-beta.1.bundle "$HOME/hermes-gate-plugin"
-hermes plugins install "file://$HOME/hermes-gate-plugin"
-```
-
-Hermes runs its normal source scan and asks whether to enable the plugin. It asks
-for `GATE_URL` and the masked `GATE_TOKEN` and saves them in the selected Hermes
-profile. Review plugin code like any code running as your OS user. If installation
-leaves it disabled, run `hermes plugins enable gate`.
-
-Then:
-
-```sh
-hermes gate status
-hermes chat -q 'Read /kb/projects/gate using Gate and tell me what it says.'
-```
-
-`gate_read`, `gate_write` and `gate_status` are native tools. Permanent system
-prompt guidance explains the project/KB/task conventions. At the first turn the
-plugin fetches a small orientation note (`/kb/agents/orientation`), falling back to
-KB discovery. It never loads the entire wiki into every prompt. This is independent
-of skills and does not edit SOUL.md or provider memory. If your Hermes profile
-restricts allowed toolsets, include `gate` in that configuration.
-
-Use a dedicated workspace directory when enabling task execution. Workers inherit
-the selected profile's provider, approvals, tools, and OS access. They do not get a
-sandbox from this plugin. Do not start two different Hermes installations against
-the same agent identity unless you intend them to compete for its tasks.
-
-## Enable automatic task pickup
-
-Start manually first, from the directory in which task workers should work:
-
-```sh
-mkdir -p "$HOME/gate-work"
-cd "$HOME/gate-work"
-hermes gate listen
-```
-
-Keep that process running. Assign a harmless task to the identity returned by
-`hermes gate status`, with status `open` (or `ready`). The listener conditionally
-claims it as `in_progress`, then starts a separate `hermes chat` process. The worker
-reads the task/project KB and saves its outcome as `done` or `blocked`. No current
-conversation is interrupted and no approval bypass flag is used. Work needing an
-interactive approval can block/fail; inspect the private run log and resume from
-an interactive session when necessary.
-
-For a persistent **user service**, from the same chosen directory:
-
-```sh
-hermes gate install-service
-# Review ~/.config/systemd/user/hermes-gate.service before enabling it.
-systemctl --user daemon-reload
-systemctl --user enable --now hermes-gate.service
-journalctl --user -u hermes-gate.service -f
-```
-
-Run `loginctl enable-linger USER` as the host administrator if this user service
-must survive logout and start at boot. Native plugin loading alone never starts
-work. One worker runs at a time per profile. The default task timeout is 30 minutes.
-Configuration lives under `plugins.entries.gate.settings` in Hermes config.yaml:
-
-```yaml
-plugins:
-  enabled: [gate] # preserve other enabled plugins
-  entries:
-    gate:
-      settings:
-        workspace: /home/hermes/gate-work
-        worker_timeout: 1800
-        orientation: /kb/agents/orientation
-```
-
-## Reconnect and crash behavior
-
-Gate commits task state, the event, and the idempotency receipt together in Git.
-The listener stores each accepted event and its cursor together in local SQLite,
-under the profile's private `plugin-data` directory. SQLite is a client delivery
-inbox, not a second source of truth for Gate content.
-
-- The client reconnects with `Last-Event-ID`; Gate replays later relevant events.
-- On connection/recovery, one task snapshot finds pre-existing open assignments.
-  There is no periodic task-list request. Heartbeats are SSE comments.
-- A conditional claim (`If-Match`) permits one winner. A persisted run ID and
-  idempotency key recover a successful claim whose response was lost.
-- A crash during execution becomes **uncertain**, not an automatic rerun. Delivery
-  and claiming can be retried; arbitrary external actions are not exactly-once.
-- Do not delete the inbox to “fix” a stuck task: inspect Gate state, run logs and
-  prior effects first. Stop the service, run `hermes gate resume TASK_ID`, then
-  restart the listener only after deciding that resuming is safe. A resumed run
-  retains its run ID, but starts a new model session with instructions to inspect
-  prior effects. This is not transcript restoration.
-- Reassigning/cancelling an in-flight task does not roll back external effects.
-  A worker's completion write checks current ownership/run and ETag; for immediate
-  interruption stop the listener/service. Never treat task assignment as an
-  authorization boundary. Agents with the same access can edit each other's data.
-
-KB writes remain full-document PUT with ETag and operation ID. Task JSON writes
-accept `project`, `title`, `description`, `responsible`, `status`; `run_id` is
-server-managed. A stale write returns 412 and must be reread/reconciled.
-
-## Architecture
-
-```mermaid
-flowchart LR
-  V[ChatGPT voice / web] -->|HTTPS 443, OAuth, /mcp| G[Existing Gate + Caddy]
-  H[Hermes sessions + native plugin] -->|HTTPS, Bearer, /kb /tasks /whoami| G
-  L[hermes gate listen] -->|Outbound GET /events, Last-Event-ID| G
-  G -->|SSE task events on that connection| L
-  L --> I[(Private SQLite inbox + cursor)]
-  L -->|Conditional POST /tasks/id/claim| G
-  L --> W[Isolated Hermes worker session]
-  W -->|KB reads + ETag task result| G
-  G --> R[(Canonical Git: KB + tasks + events)]
-```
-
-MCP remains the voice-facing request/response adapter. `/events` is a separate
-REST-side SSE subscription, not an MCP session or an inference stream.
-
-## Test and release boundaries
-
-```sh
-python3 -m unittest discover -s tests -v
-# Real server integration, including bootstrap/admin/revocation:
-GATE_TEST_BIN_DIR=/path/to/built/gate-binaries python3 -m unittest discover -s tests -v
-# Against an actual Hermes source checkout, using its Python environment:
-PYTHONPATH=/path/to/hermes-agent python tests/native_loader_check.py
-# Also exercise the native installer/scan in a fresh temporary profile:
-PYTHONPATH=/path/to/hermes-agent python tests/native_install_check.py
-```
-
-Contract checked against Hermes commit
-`e075441241b8d626789b4aae0e376f86eabf824d`. Tests use a real Gate process and SSE
-connection, with a synthetic executor instead of spending model tokens. The actual
-user VM/provider still needs the end-to-end acceptance test. No polling fallback.
-
-## Deferred
-
-- A Gate admin dashboard: token issue/revoke, per-token usage, agent connection and
-  task-run status. It needs a **separate human admin session**, never ordinary agent
-  tokens. Start with SSH-forwarded/private access; if exposed publicly, use a mature
-  OIDC provider or passkey-backed admin login, secure sessions and CSRF protection.
-  An existing ChatGPT OAuth callback authenticates an OAuth client connection, not
-  an administrator. We do not need to add that machinery to ship this plugin.
-- Optionally hosting Gate from the Hermes plugin for one-machine onboarding. This
-  would add server lifecycle, storage ownership, upgrades, TLS, reachability and
-  authentication responsibilities; the current plugin only connects to a server.
-- General messaging and notifications, richer scheduling/dependencies, assets,
-  permissions, event-history compaction and transcript-aware worker recovery.
+Developer design notes and validation are in [the gateway ADR](docs/adr/0001-gateway-owned-task-runtime.md).
+MIT license.
