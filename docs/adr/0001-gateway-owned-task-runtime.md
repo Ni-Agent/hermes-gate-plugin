@@ -98,3 +98,25 @@ probe independent from credential validation. The regression now covers both the
 scoped profile with a deliberately wrong process token and the actual unscoped
 multiplex primary startup, including task execution and reconnect. No credential
 rotation, server change or Hermes core update is needed.
+
+## Acceptance and credential onboarding
+
+On 2026-11-08 the user confirmed beta3 works on the actual Hermes VM after the
+startup fix. This confirms the previously failing gateway startup; no new beta3
+voice-task transcript was supplied in that confirmation. The earlier beta1
+voice-created task and the automated gateway/task tests remain separate evidence.
+
+`tests/native_credentials_check.py` exercises Hermes v0.23.0's real credential
+prompt/persistence function in a fresh temporary profile with synthetic answers.
+It verifies that a missing Gate URL uses the normal input prompt, the missing
+token uses the masked secret prompt, the saved `.env` is private, console output
+does not disclose the token, and a second invocation reuses existing values.
+Run it with `PYTHONPATH=/path/to/hermes-agent python tests/native_credentials_check.py`.
+
+The plugin's `requires_env` declarations drive native onboarding. It prompts for
+credentials that the Gate administrator has already issued; it does not create an
+account or issue a token. These prompts save values and do not validate remote
+authentication during installation. `hermes gate status` verifies connectivity
+and authentication afterward. A new installation still requires a configured
+Hermes model/provider and Hermes's normal gateway setup. Broader first-user UX
+review remains tracked separately from this startup fix.
