@@ -62,7 +62,8 @@ with observed gateway connection state.
   child executable: live pickup, offline replay across adapter replacement, one
   execution each, chat-send rejection, bounded shutdown of a SIGTERM-resistant
   child, uncertain-run recovery, cross-profile credential scoping and unload.
-- Existing eight REST/SSE/inbox integration tests remain applicable.
+- Existing eight REST/SSE/inbox integration tests passed. Native beta1-to-beta2
+  update was verified to preserve profile credentials and user-owned plugin files.
 
 Run with a Hermes checkout/environment and built Gate executables:
 
@@ -71,6 +72,7 @@ GATE_TEST_BIN_DIR=/path/to/gate-binaries python3 -m unittest discover -s tests -
 PYTHONPATH=/path/to/hermes-agent python tests/native_loader_check.py
 PYTHONPATH=/path/to/hermes-agent GATE_TEST_BIN_DIR=/path/to/gate-binaries python tests/native_gateway_check.py
 PYTHONPATH=/path/to/hermes-agent python tests/native_install_check.py
+PYTHONPATH=/path/to/hermes-agent python tests/native_upgrade_check.py
 ```
 
 Public guide used as API entry point; exact stable source is authoritative:
