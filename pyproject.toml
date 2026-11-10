@@ -1,6 +1,6 @@
 [project]
 name = "hermes-gate-plugin"
-version = "1.0.0b1"
+version = "0.1.0b1"
 description = "Native Hermes client for a separately hosted Gate"
 requires-python = ">=3.11"
 dependencies = []

@@ -115,6 +115,7 @@ def register(ctx):
     def status(args=None, **kwargs):
         try:
             c = client()
+            c.timeout = 3
             who = json.loads(c.request("/whoami")["body"])
             health = json.loads(c.request("/healthz")["body"])
             return json.dumps(
@@ -122,16 +123,17 @@ def register(ctx):
                     "identity": who["identity"],
                     "server_version": health["version"],
                     "url": c.url,
-                    "listener": listener_status(directory),
+                    "listener": pickup_status(directory, profile_home),
                     "data_dir": str(directory),
                     "inbox": local_tasks(directory),
                 }
             )
-        except (GateError, OSError, ValueError, RuntimeError) as exc:
+        except (GateError, OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
             return json.dumps(
                 {
                     "status": getattr(exc, "status", 0),
                     "error": "Gate authentication or availability failed",
+                    "error_kind": "configuration" if isinstance(exc, (ValueError, RuntimeError)) else "authentication" if getattr(exc, "status", 0) in (401, 403) else "connection",
                     "data_dir": str(directory),
                     "inbox": local_tasks(directory),
                 }
@@ -257,19 +259,30 @@ def register(ctx):
                 print(json.dumps(report))
             else:
                 print(format_status(report))
+            if "error" in report:
+                raise SystemExit(1)
             return
-        c = client()
-        runtime = Runtime(
-            c,
-            directory,
-            profile_home,
-            ctx.get_config("workspace", str(profile_home / "gate-work")),
-        )
+        runtime = None
         try:
+            c = client()
+            runtime = Runtime(
+                c, directory, profile_home,
+                ctx.get_config("workspace", str(profile_home / "gate-work")),
+            )
             runtime.inbox.resume(args.task_id)
             print("Task queued. Start the Hermes gateway to resume it.")
+        except (GateError, OSError, ValueError, RuntimeError) as exc:
+            if isinstance(exc, GateError):
+                message = "Gate request failed (HTTP " + str(exc.status) + "). Check hermes gate status."
+            elif isinstance(exc, OSError):
+                message = "Gate is unavailable. Check hermes gate status."
+            else:
+                message = str(exc)
+            print("Cannot resume: " + message)
+            raise SystemExit(1) from None
         finally:
-            runtime.stop()
+            if runtime is not None:
+                runtime.stop()
 
     ctx.register_cli_command("gate", "Gate connection and task status", cli_setup, cli)
     ctx.register_command(
@@ -281,9 +294,13 @@ def format_status(report):
     """Render current connection and actionable local work; history stays in JSON."""
     if "error" in report:
         code = report.get("status")
-        reason = "Authentication rejected" if code in (401, 403) else "Connection unavailable"
-        lines = ["Gate: " + reason + (" (HTTP " + str(code) + ")" if code else ""),
-                 "Check the profile's Gate URL and token; then run hermes gate status again."]
+        reason = "Configuration missing or invalid" if report.get("error_kind") == "configuration" else "Authentication rejected" if code in (401, 403) else "Connection unavailable"
+        action = "Check GATE_URL and GATE_TOKEN in this Hermes profile's .env; then retry hermes gate status."
+        if code in (401, 403):
+            action = "Ask the Gate operator for a valid dedicated agent token and update GATE_TOKEN in this profile's .env; then retry."
+        elif report.get("error_kind") == "connection":
+            action = "Check that Gate is running and the profile's GATE_URL is correct; then retry hermes gate status."
+        lines = ["Gate: " + reason + (" (HTTP " + str(code) + ")" if code else ""), action]
     else:
         listener = report.get("listener", {})
         state = listener.get("state", "unknown")
@@ -291,7 +308,11 @@ def format_status(report):
                  "Server: " + report["server_version"] + " at " + report["url"],
                  "Task pickup: " + state]
         if state == "stopped":
-            lines.append("Start the Hermes gateway with hermes gateway start.")
+            lines.append("First gateway setup: hermes gateway setup. Configured but stopped: hermes gateway start. Already running: hermes gateway restart.")
+        elif state == "configuration_error":
+            lines.append("Check this profile's config.yaml gateway settings, then restart the Hermes gateway. Use hermes logs gateway --follow for startup details.")
+        elif state == "disabled":
+            lines.append("Task pickup is disabled in this profile's config.yaml (gateway.platforms.gate.enabled). Set it to true and restart the Hermes gateway to enable it.")
         elif listener.get("error"):
             lines.append("Gateway detail: " + str(listener["error"]))
     active = [row for row in report.get("inbox", []) if row["stage"] not in ("done", "skipped")]
@@ -339,3 +360,17 @@ def orientation_index(body):
         count += 1
     lines.append("Partial index: showing " + str(count) + " of " + str(len(paths)) + " returned project paths. Search /kb?q=words or list /kb?prefix=projects for more.")
     return "\n".join(lines)
+
+
+def pickup_status(directory, profile_home):
+    from ruamel.yaml import YAML
+    config_path = pathlib.Path(profile_home) / "config.yaml"
+    try:
+        if config_path.exists():
+            config = YAML(typ="safe").load(config_path.read_text()) or {}
+            entry = (config.get("gateway") or {}).get("platforms", {}).get("gate", {})
+            if entry.get("enabled") is False:
+                return {"state": "disabled"}
+    except Exception:
+        return {"state": "configuration_error"}
+    return listener_status(directory)

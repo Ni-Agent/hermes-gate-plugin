@@ -21,7 +21,7 @@ hermes gate status
 For a supplied Git bundle, clone it to a local repository first:
 
 ```sh
-git clone /absolute/path/to/hermes-gate-1.0.0-beta.1.bundle "$HOME/hermes-gate-plugin"
+git clone /absolute/path/to/hermes-gate-0.1.0-beta.1.bundle "$HOME/hermes-gate-plugin"
 hermes plugins install "file://$HOME/hermes-gate-plugin"
 hermes gateway restart
 ```
@@ -118,9 +118,16 @@ remote host; cleartext HTTP is accepted only for literal loopback addresses.
 Redirects are rejected.
 
 Start the Hermes gateway and run `hermes gate status`. Once task pickup is
-connected, create a small task assigned to the displayed identity with status
-`ready` (for example, ask for a short joke). Confirm that Gate records the task's
-result and terminal status. A claimed task alone is not evidence of completion.
+connected, open a Hermes chat and ask:
+
+> Use gate_status to get my identity. Use gate_write to create a task with title
+> "First Gate task", project "getting-started", description "Write one short joke
+> in the task result", responsible set to that identity and status "ready".
+> Tell me the returned task ID.
+
+Leave the gateway running. Ask Hermes `Use gate_read to read /tasks/TASK_ID and
+show its status and saved result`, substituting the returned ID. Confirm that Gate
+records the result and terminal status. A claimed task alone is not evidence of completion.
 If a worker exits without a confirmed result, status shows it as needing review.
 
 Current Gate identities have equal data access. Use a dedicated test Gate

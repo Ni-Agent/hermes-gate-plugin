@@ -5,7 +5,7 @@ manifest version and create the matching local tag before packaging. For this
 candidate:
 
 ```sh
-VERSION=1.0.0-beta.1
+VERSION=0.1.0-beta.1
 # Run once for a new release; an existing tag must already identify this HEAD.
 git tag "v$VERSION"
 mkdir -p dist

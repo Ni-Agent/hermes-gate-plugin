@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory(prefix="gate-native-upgrade-") as tmp:
     local = root / "source"
     subprocess.run(["git", "clone", "--quiet", str(source), str(local)], check=True)
     subprocess.run(
-        ["git", "reset", "--hard", "v0.1.0-beta.1"],
+        ["git", "reset", "--hard", os.environ.get("GATE_UPGRADE_FROM", "legacy/v0.1.0-beta.1")],
         cwd=local,
         check=True,
         capture_output=True,
@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix="gate-native-upgrade-") as tmp:
     from hermes_cli.plugins_cmd_install import _install_plugin_core
 
     target, manifest, name = _install_plugin_core(local.as_uri(), force=False)
-    assert manifest["version"] == "0.1.0-beta.1"
+    assert manifest["version"] in ("0.1.0-beta.1", "0.1.0-beta.3")
     (home / ".env").write_text(
         "GATE_URL=https://gate.example\nGATE_TOKEN=synthetic-upgrade-token\n"
     )
@@ -50,4 +50,4 @@ with tempfile.TemporaryDirectory(prefix="gate-native-upgrade-") as tmp:
     )
     assert (home / ".env").read_bytes() == before
     assert (target / "user-settings.txt").read_text() == "keep me"
-    print("PASS: native beta1-to-current update preserves credentials and user files")
+    print("PASS: native prior-installation update preserves credentials and user files")
