@@ -1,6 +1,14 @@
 # Gateway-owned Gate task runtime
 
-2026-11-08 — implemented in 0.1.0-beta.2; actual VM acceptance pending.
+2026-11-08 — implemented in 0.1.0-beta.2.
+
+2026-11-10 — existing beta3 VM review observed authenticated connected status,
+gateway-owned listener lock and model-backed task child ancestry, and saved its
+review to `/kb/projects/gate/release/hermes-review-2026-11-10` (task
+`153d121abbd0761e643234c4`). These observations establish existing-installation
+connectivity and task launch. They do not certify fresh VM installation, offline
+replay, restart recovery or provider cancellation; local synthetic/native checks
+cover the tested delivery and recovery cases separately.
 
 ## Decision and scope
 

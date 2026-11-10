@@ -1,7 +1,7 @@
-Gate is enabled. Restart your Hermes gateway to activate task pickup:
+Configure your Hermes model/provider if needed. Then activate Gate task pickup:
 
-```sh
-hermes gateway restart
-```
+- First gateway setup: `hermes gateway setup`
+- Configured gateway stopped: `hermes gateway start`
+- Gateway already running: `hermes gateway restart`
 
-Run `hermes gate status` to check the connection.
+Run `hermes gate status` to verify authentication, identity and task pickup.

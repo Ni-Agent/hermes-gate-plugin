@@ -74,8 +74,9 @@ Then restart the gateway. Closing a chat does not stop task pickup.
 
 `hermes gate status` shows the authenticated identity, server version, connection
 and local tasks needing action or execution. Completed local bookkeeping is hidden.
-Use `hermes gate status --json` for machine-readable status and full local history. For gateway logs, use `hermes logs --follow`. Private
-worker logs are stored under the profile's `plugin-data` directory.
+Use `hermes gate status --json` for machine-readable status and full local history. For gateway logs, use `hermes logs gateway --follow`. Private
+worker logs stay in the profile's `plugin-data` directory; status gives the exact
+run ID and log path for active work and tasks needing review.
 
 An interrupted task can require review. Inspect its Gate record, worker log and
 any changes already made. After deciding that resuming is safe:
@@ -107,18 +108,9 @@ Do not delete the plugin's data directory during the upgrade.
 
 Run Gate and Hermes on the same Linux machine. Follow the Gate release's native
 setup instructions with `http://127.0.0.1:18084` as the public URL. Keep Gate bound
-to `127.0.0.1:18084`. Create a dedicated agent token on that host (replace
-`/absolute/path/to/gate-instance` with your instance directory):
-
-```sh
-GATE_INSTANCE=/absolute/path/to/gate-instance
-gate-admin -url http://127.0.0.1:18084 \
-  -operator-token-file "$GATE_INSTANCE/config/operator.token" \
-  -tokens "$GATE_INSTANCE/config/tokens.json" \
-  -identity agent:hermes -out "$GATE_INSTANCE/config/hermes.token"
-```
-
-Restart Gate to load the new token. Install this plugin from your local source
+to `127.0.0.1:18084`. The `gate-local setup` command creates the dedicated `agent:hermes` token at
+`<instance>/config/hermes.token`. Use that existing token; do not run token
+creation again. Install this plugin from your local source
 checkout using the Connect instructions above. Enter `http://127.0.0.1:18084`
 and the dedicated token into the installer's masked token prompt. Keep the token
 out of chats, shell command arguments and repositories. HTTPS is required for a
