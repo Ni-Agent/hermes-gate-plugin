@@ -18,7 +18,7 @@ to disclose credentials. Gate writes use ETags and unique operation IDs. On an
 uncertain write response reuse the exact operation ID, ETag and payload; on 412,
 reread and reconcile. Never invent successful saves or completed work.
 Task PUT accepts only project,title,description,responsible,status. Preserve the
-original description and add concise results/evidence or blockers. No polling.
+original description and add concise results/evidence or blockers.
 """
 
 
@@ -38,9 +38,9 @@ class Client:
     def __init__(self, url, token, timeout=20):
         self.url = url.rstrip("/")
         parts = urllib.parse.urlsplit(self.url)
-        local = parts.hostname in ("127.0.0.1", "localhost", "::1")
+        local = parts.hostname in ("127.0.0.1", "::1")
         if parts.scheme != "https" and not (parts.scheme == "http" and local):
-            raise ValueError("Gate URL must use HTTPS (HTTP only for loopback tests)")
+            raise ValueError("Gate URL must use HTTPS (HTTP only for literal loopback addresses)")
         if (
             not parts.netloc
             or parts.username
@@ -76,7 +76,7 @@ class Client:
             or path.startswith("//")
         ):
             raise ValueError("Relative Gate path required")
-        h = {"Authorization": "Bearer " + self.token, "User-Agent": "HermesGate/0.1.0"}
+        h = {"Authorization": "Bearer " + self.token, "User-Agent": "HermesGate/1.0.0-beta.1"}
         h.update(headers or {})
         raw = None
         if body is not None:
@@ -488,7 +488,13 @@ class Runtime:
                     detail="Worker exited without a confirmed terminal task result; inspect before resume",
                 )
         except GateError as exc:
-            if exc.status in (404, 409, 412):
+            current = self.inbox.row(task_id)
+            if current and current[0] == "running":
+                self.inbox.stage(
+                    task_id, "uncertain",
+                    detail="Task result could not be verified: HTTP " + str(exc.status) + "; inspect before resume",
+                )
+            elif exc.status in (404, 409, 412):
                 self.inbox.stage(
                     task_id,
                     "skipped",

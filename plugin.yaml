@@ -1,5 +1,5 @@
 name: gate
-version: "0.1.0-beta.3"
+version: "1.0.0-beta.1"
 kind: standalone
 manifest_version: 2
 api_version: 1
@@ -9,7 +9,7 @@ provides_tools: [gate_read, gate_write, gate_status]
 provides_hooks: [pre_llm_call]
 requires_env:
   - name: GATE_URL
-    description: "Your Gate HTTPS origin, supplied by its operator (no /mcp suffix)."
+    description: "Gate origin: HTTPS remotely, or http://127.0.0.1:18084 on the same machine (no /mcp suffix)."
   - name: GATE_TOKEN
     description: "Your dedicated agent token, issued by the Gate operator."
     secret: true

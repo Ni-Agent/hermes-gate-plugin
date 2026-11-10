@@ -21,7 +21,7 @@ hermes gate status
 For a supplied Git bundle, clone it to a local repository first:
 
 ```sh
-git clone /absolute/path/to/hermes-gate-0.1.0-beta.3.bundle "$HOME/hermes-gate-plugin"
+git clone /absolute/path/to/hermes-gate-1.0.0-beta.1.bundle "$HOME/hermes-gate-plugin"
 hermes plugins install "file://$HOME/hermes-gate-plugin"
 hermes gateway restart
 ```
@@ -73,7 +73,8 @@ Then restart the gateway. Closing a chat does not stop task pickup.
 ## Status and recovery
 
 `hermes gate status` shows the authenticated identity, server version, connection
-and local task outcomes. For gateway logs, use `hermes logs --follow`. Private
+and local tasks needing action or execution. Completed local bookkeeping is hidden.
+Use `hermes gate status --json` for machine-readable status and full local history. For gateway logs, use `hermes logs --follow`. Private
 worker logs are stored under the profile's `plugin-data` directory.
 
 An interrupted task can require review. Inspect its Gate record, worker log and
@@ -99,27 +100,40 @@ systemctl --user disable --now hermes-gate.service
 ```
 
 Update/reinstall the plugin and restart the Hermes gateway. Existing tasks and
-reconnect state are retained. Beta2 has no separate Gate service to register.
+reconnect state are retained. Current releases use the Hermes gateway.
 Do not delete the plugin's data directory during the upgrade.
 
-## Gate administration
+## Same-machine reviewer setup
 
-The Gate administrator chooses the HTTPS URL during server setup and issues a
-separate token for each agent. On the Gate host:
+Run Gate and Hermes on the same Linux machine. Follow the Gate release's native
+setup instructions with `http://127.0.0.1:18084` as the public URL. Keep Gate bound
+to `127.0.0.1:18084`. Create a dedicated agent token on that host (replace
+`/absolute/path/to/gate-instance` with your instance directory):
 
 ```sh
-sudo gate-admin -url https://gate.example.org \
-  -identity agent:hermes-home -out /etc/gate/hermes-home.token
-sudo systemctl restart gate
+GATE_INSTANCE=/absolute/path/to/gate-instance
+gate-admin -url http://127.0.0.1:18084 \
+  -operator-token-file "$GATE_INSTANCE/config/operator.token" \
+  -tokens "$GATE_INSTANCE/config/tokens.json" \
+  -identity agent:hermes -out "$GATE_INSTANCE/config/hermes.token"
 ```
 
-Transfer the token privately. The command prints the output file path, not the
-secret. List token IDs using `sudo gate-admin -action list-tokens`. Revoke one with
-`sudo gate-admin -action revoke-token -token-id ID` and restart Gate.
+Restart Gate to load the new token. Install this plugin from your local source
+checkout using the Connect instructions above. Enter `http://127.0.0.1:18084`
+and the dedicated token into the installer's masked token prompt. Keep the token
+out of chats, shell command arguments and repositories. HTTPS is required for a
+remote host; cleartext HTTP is accepted only for literal loopback addresses.
+Redirects are rejected.
 
-Current Gate identities have equal data access. Agent tokens provide access to the
-KB and tasks; keep them out of chats and repositories. Administration uses the
-host's existing SSH/sudo access. ChatGPT's OAuth login is separate from an agent token.
+Start the Hermes gateway and run `hermes gate status`. Once task pickup is
+connected, create a small task assigned to the displayed identity with status
+`ready` (for example, ask for a short joke). Confirm that Gate records the task's
+result and terminal status. A claimed task alone is not evidence of completion.
+If a worker exits without a confirmed result, status shows it as needing review.
+
+Current Gate identities have equal data access. Use a dedicated test Gate
+instance when reviewing. Token administration uses the host's existing access;
+ChatGPT OAuth is separate from the Hermes agent token.
 
 Developer design notes and validation are in [the gateway ADR](docs/adr/0001-gateway-owned-task-runtime.md).
 MIT license.

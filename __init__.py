@@ -125,10 +125,10 @@ def register(ctx):
                     "listener": listener_status(directory),
                 }
             )
-        except GateError as exc:
+        except (GateError, OSError, ValueError, RuntimeError) as exc:
             return json.dumps(
                 {
-                    "status": exc.status,
+                    "status": getattr(exc, "status", 0),
                     "error": "Gate authentication or availability failed",
                 }
             )
@@ -237,30 +237,28 @@ def register(ctx):
 
     def cli_setup(parser):
         sub = parser.add_subparsers(dest="gate_action", required=True)
-        sub.add_parser("status", help="Show Gate connection and task pickup status")
+        status_parser = sub.add_parser("status", help="Show Gate connection and task pickup status")
+        status_parser.add_argument("--json", action="store_true", help="Show machine-readable status and local task history")
         resume = sub.add_parser("resume", help="Resume a reviewed interrupted task")
         resume.add_argument("task_id")
 
     def cli(args):
         if args.gate_action == "status":
-            print(status())
+            report = json.loads(status())
+            report["inbox"] = []
             db = directory / "inbox.sqlite"
             if db.exists():
                 import sqlite3
 
                 with sqlite3.connect("file:" + str(db) + "?mode=ro", uri=True) as conn:
-                    print(
-                        json.dumps(
-                            {
-                                "inbox": [
-                                    dict(zip(("task_id", "stage", "detail"), r))
-                                    for r in conn.execute(
-                                        "SELECT task_id,stage,detail FROM inbox"
-                                    )
-                                ]
-                            }
-                        )
-                    )
+                    report["inbox"] = [
+                        dict(zip(("task_id", "stage", "detail"), row))
+                        for row in conn.execute("SELECT task_id,stage,detail FROM inbox")
+                    ]
+            if getattr(args, "json", False):
+                print(json.dumps(report))
+            else:
+                print(format_status(report))
             return
         c = client()
         runtime = Runtime(
@@ -279,3 +277,29 @@ def register(ctx):
     ctx.register_command(
         "gate", lambda raw: status(), description="Gate connection and identity status"
     )
+
+
+def format_status(report):
+    """Render current connection and actionable local work; history stays in JSON."""
+    if "error" in report:
+        code = report.get("status")
+        reason = "Authentication rejected" if code in (401, 403) else "Connection unavailable"
+        return "Gate: " + reason + (" (HTTP " + str(code) + ")" if code else "") + "\nCheck the profile's Gate URL and token; then run hermes gate status again."
+    listener = report.get("listener", {})
+    state = listener.get("state", "unknown")
+    lines = ["Gate: reachable — " + report["identity"],
+             "Server: " + report["server_version"] + " at " + report["url"],
+             "Task pickup: " + state]
+    if state == "stopped":
+        lines.append("Start the Hermes gateway with hermes gateway start.")
+    elif listener.get("error"):
+        lines.append("Gateway detail: " + str(listener["error"]))
+    active = [row for row in report.get("inbox", []) if row["stage"] not in ("done", "skipped")]
+    if not active:
+        lines.append("Local tasks: none awaiting action or execution.")
+    for row in active:
+        label = "needs review" if row["stage"] == "uncertain" else row["stage"]
+        lines.append("Task " + row["task_id"] + ": " + label)
+        if row["stage"] == "uncertain":
+            lines.append("Inspect its Gate record and worker log before hermes gate resume " + row["task_id"] + ".")
+    return "\n".join(lines)

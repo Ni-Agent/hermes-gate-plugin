@@ -8,12 +8,15 @@ class ClientTests(unittest.TestCase):
     def test_url_and_credential_boundaries(self):
         for url in [
             "http://example.com",
+            "http://localhost",
+            "http://127.0.0.1.evil.example",
             "https://a/b",
             "https://u:p@a",
             "https://a?x=1",
         ]:
             with self.assertRaises(ValueError):
                 Client(url, "token")
+        self.assertEqual(Client("http://127.0.0.1:18084", "token").url, "http://127.0.0.1:18084")
         c = Client("https://example.com", "token")
         for path in ["//evil/x", "https://evil/x", "/kb#secret"]:
             with self.assertRaises(ValueError):

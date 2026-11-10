@@ -244,6 +244,15 @@ class Integration(unittest.TestCase):
         time.sleep(0.4)
         self.assertEqual(len([p for p in counts if p.startswith("/tasks?")]), 1)
 
+    def test_successful_exit_without_task_result_requires_review(self):
+        rt, thread = self.listen()
+        rt.launcher = lambda task_id, run_id: 0
+        task = self.create("Worker did not save a result")
+        wait_for(lambda: rt.inbox.row(task) and rt.inbox.row(task)[0] == "uncertain")
+        current, _ = self.client.task(task)
+        self.assertEqual(current["status"], "in_progress")
+        self.assertIsNone(rt.inbox.next())
+
     def test_auth_and_revocation(self):
         with self.assertRaises(GateError):
             Client(self.url, "wrong").stream("0")
