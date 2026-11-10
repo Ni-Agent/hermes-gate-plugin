@@ -253,6 +253,15 @@ class Integration(unittest.TestCase):
         self.assertEqual(current["status"], "in_progress")
         self.assertIsNone(rt.inbox.next())
 
+    def test_http_failure_after_execution_requires_review(self):
+        rt, thread = self.listen()
+        def unavailable(task_id, run_id):
+            raise GateError(404, "Task unavailable after possible effects")
+        rt.launcher = unavailable
+        task = self.create("Unverifiable worker result")
+        wait_for(lambda: rt.inbox.row(task) and rt.inbox.row(task)[0] == "uncertain")
+        self.assertIsNone(rt.inbox.next())
+
     def test_auth_and_revocation(self):
         with self.assertRaises(GateError):
             Client(self.url, "wrong").stream("0")
