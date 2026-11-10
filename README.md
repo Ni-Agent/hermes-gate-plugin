@@ -104,7 +104,7 @@ Update/reinstall the plugin and restart the Hermes gateway. Existing tasks and
 reconnect state are retained. Current releases use the Hermes gateway.
 Do not delete the plugin's data directory during the upgrade.
 
-## Same-machine reviewer setup
+## Same-machine setup
 
 Run Gate and Hermes on the same Linux machine. Follow the Gate release's native
 setup instructions with `http://127.0.0.1:18084` as the public URL. Keep Gate bound
@@ -124,7 +124,7 @@ result and terminal status. A claimed task alone is not evidence of completion.
 If a worker exits without a confirmed result, status shows it as needing review.
 
 Current Gate identities have equal data access. Use a dedicated test Gate
-instance when reviewing. Token administration uses the host's existing access;
+instance for evaluation. Token administration uses the host's existing access;
 ChatGPT OAuth is separate from the Hermes agent token.
 
 Developer design notes and validation are in [the gateway ADR](docs/adr/0001-gateway-owned-task-runtime.md).
