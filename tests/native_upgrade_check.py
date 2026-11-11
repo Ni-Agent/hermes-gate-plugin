@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory(prefix="gate-native-upgrade-") as tmp:
     local = root / "source"
     subprocess.run(["git", "clone", "--quiet", str(source), str(local)], check=True)
     subprocess.run(
-        ["git", "reset", "--hard", os.environ.get("GATE_UPGRADE_FROM", "legacy/v0.1.0-beta.1")],
+        ["git", "reset", "--hard", os.environ.get("GATE_UPGRADE_FROM", "dd6add636e3ae14eede243b7c1b609a74ee5fc37")],
         cwd=local,
         check=True,
         capture_output=True,

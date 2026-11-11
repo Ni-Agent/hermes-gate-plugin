@@ -93,6 +93,7 @@ PYTHONPATH=/path/to/hermes-agent GATE_TEST_BIN_DIR=/path/to/gate-binaries python
 PYTHONPATH=/path/to/hermes-agent python tests/native_install_check.py
 PYTHONPATH=/path/to/hermes-agent python tests/native_upgrade_check.py
 PYTHONPATH=/path/to/hermes-agent python tests/native_credentials_check.py
+PYTHONPATH=/path/to/hermes-agent GATE_TEST_BIN_DIR=/path/to/gate-binaries python tests/native_consumer_check.py
 ```
 
 The [Hermes adapter guide](https://hermes-agent.nousresearch.com/docs/developer-guide/adding-platform-adapters)
