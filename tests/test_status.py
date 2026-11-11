@@ -52,3 +52,16 @@ class StatusTests(unittest.TestCase):
             self.assertIn("Stop the Hermes gateway", output)
             self.assertEqual(box.row(task)[0], "uncertain")
             box.db.close()
+
+    def test_configuration_and_connection_errors_have_specific_actions(self):
+        output = module.format_status({"error": "failed", "status": 0, "error_kind": "configuration"})
+        self.assertIn("Configuration missing or invalid", output)
+        self.assertIn("GATE_TOKEN", output)
+        output = module.format_status({"error": "failed", "status": 0, "error_kind": "connection"})
+        self.assertIn("Check that Gate is running", output)
+
+    def test_disabled_pickup_does_not_claim_gateway_is_stopped(self):
+        output = module.format_status({"identity": "agent:test", "server_version": "test", "url": "http://127.0.0.1", "listener": {"state": "disabled"}})
+        self.assertIn("Task pickup: disabled", output)
+        self.assertIn("gateway.platforms.gate.enabled", output)
+        self.assertNotIn("First gateway setup", output)

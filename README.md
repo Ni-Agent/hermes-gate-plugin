@@ -2,7 +2,9 @@
 
 Shared project knowledge and assigned tasks in Hermes. Gate context and tools are
 available in your sessions. Your Hermes gateway picks up tasks assigned to your
-agent and records their results in Gate.
+agent and records verified results or blockers in Gate when work completes.
+Connection and task execution depend on valid credentials, a running gateway and
+your configured model/provider.
 
 ## Connect
 
@@ -14,8 +16,6 @@ For a source checkout:
 
 ```sh
 hermes plugins install file:///absolute/path/to/hermes-gate-plugin
-hermes gateway restart
-hermes gate status
 ```
 
 For a supplied Git bundle, clone it to a local repository first:
@@ -23,11 +23,15 @@ For a supplied Git bundle, clone it to a local repository first:
 ```sh
 git clone /absolute/path/to/hermes-gate-0.1.0-beta.1.bundle "$HOME/hermes-gate-plugin"
 hermes plugins install "file://$HOME/hermes-gate-plugin"
-hermes gateway restart
 ```
 
-If Hermes has no gateway installed yet, run `hermes gateway setup`. Use
-`hermes gateway start` to start an already configured gateway that is stopped.
+Then activate the gateway:
+
+- First setup: `hermes gateway setup`
+- Configured gateway stopped: `hermes gateway start`
+- Gateway already running: `hermes gateway restart`
+
+Run `hermes gate status` to verify the authenticated identity and task pickup.
 
 Requires Linux, Python 3.11+, and Hermes Agent v0.23.0. Tested against stable
 commit `2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19`. Your Hermes model/provider must
@@ -39,6 +43,13 @@ Ask Hermes to read a project from Gate. You can also use `gate_read`, `gate_writ
 and `gate_status` directly. Assign a task to the identity reported by
 `hermes gate status`, with status `open` or `ready`. Keep the gateway running to
 receive assignments. The task will show its progress and outcome in Gate.
+For a first note, ask Hermes:
+
+> Use gate_write to create /kb/projects/getting-started with Markdown "# Getting
+> started" and a short description of this project. Use a fresh operation ID and
+> create-only ETag *. Then read it back with gate_read and confirm the saved text.
+
+For an assigned-task example and result inspection, see Same-machine setup below.
 
 Tasks use the selected profile's tools, credentials and approval settings. Work
 needing an interactive approval may need your attention. Review results before
@@ -90,17 +101,25 @@ hermes gateway start
 Resuming starts a new session for the same task run. Previous actions are not
 undone, and previous conversation transcripts are not restored automatically.
 
-## Upgrade from beta1
+If status reports missing/invalid configuration, check `GATE_URL` and `GATE_TOKEN`
+in the selected Hermes profile's `.env`. Authentication rejection means the token
+needs correction or replacement by the Gate operator. Connection unavailable means
+Gate may be stopped or the URL is wrong. After correcting the values, restart the
+Hermes gateway and run status again. A reachable server with pickup disabled still
+allows manual tools; enable `gateway.platforms.gate.enabled` to receive tasks.
+
+## Upgrade an existing installation
 
 Keep the existing profile and credentials. Stop the previous `hermes gate listen`
-process before updating. If you enabled beta1's separate user service, stop and
+process before updating. If you enabled a separate Gate user service, stop and
 disable it once:
 
 ```sh
 systemctl --user disable --now hermes-gate.service
 ```
 
-Update/reinstall the plugin and restart the Hermes gateway. Existing tasks and
+Run `hermes plugins update gate` for an existing Git installation, or reinstall
+from the supplied source. Restart the Hermes gateway afterward. Existing tasks and
 reconnect state are retained. Current releases use the Hermes gateway.
 Do not delete the plugin's data directory during the upgrade.
 
@@ -109,8 +128,11 @@ Do not delete the plugin's data directory during the upgrade.
 Run Gate and Hermes on the same Linux machine. Follow the Gate release's native
 setup instructions with `http://127.0.0.1:18084` as the public URL. Keep Gate bound
 to `127.0.0.1:18084`. The `gate-local setup` command creates the dedicated `agent:hermes` token at
-`<instance>/config/hermes.token`. Use that existing token; do not run token
-creation again. Install this plugin from your local source
+`~/.local/share/gate/config/hermes.token` by default (or
+`$GATE_HOME/config/hermes.token` for a custom instance). Use that existing token;
+do not run token creation again. In a private terminal, read the default file with
+`cat ~/.local/share/gate/config/hermes.token`, then enter it in the masked installer
+prompt. Install this plugin from your local source
 checkout using the Connect instructions above. Enter `http://127.0.0.1:18084`
 and the dedicated token into the installer's masked token prompt. Keep the token
 out of chats, shell command arguments and repositories. HTTPS is required for a

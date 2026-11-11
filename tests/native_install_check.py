@@ -10,4 +10,5 @@ with tempfile.TemporaryDirectory(prefix="gate-install-check-") as home:
         pathlib.Path(__file__).resolve().parents[1].as_uri(), force=False
     )
     assert name == "gate" and (target / "plugin.yaml").is_file()
+    assert manifest["version"] == "0.1.0-beta.1", manifest["version"]
     print("PASS: native Hermes installer cloned, scanned and placed", name)

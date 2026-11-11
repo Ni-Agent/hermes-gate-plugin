@@ -265,6 +265,7 @@ def register(ctx):
         runtime = None
         try:
             c = client()
+            c.timeout = 3
             runtime = Runtime(
                 c, directory, profile_home,
                 ctx.get_config("workspace", str(profile_home / "gate-work")),
