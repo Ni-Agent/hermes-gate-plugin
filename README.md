@@ -12,7 +12,14 @@ Get your **Gate URL** and a dedicated **agent token** from your Gate administrat
 Install and enable this plugin using Hermes's plugin installer. It prompts for
 both values and saves them in the selected profile. The token field is masked.
 
-For a source checkout:
+Install the public plugin:
+
+```sh
+hermes plugins install https://github.com/Ni-Agent/hermes-gate-plugin.git
+```
+
+Release packages are available on the [releases page](https://github.com/Ni-Agent/hermes-gate-plugin/releases).
+For an existing local source checkout instead:
 
 ```sh
 hermes plugins install file:///absolute/path/to/hermes-gate-plugin
@@ -125,15 +132,15 @@ Do not delete the plugin's data directory during the upgrade.
 
 ## Same-machine setup
 
-Run Gate and Hermes on the same Linux machine. Follow the Gate release's native
-setup instructions with `http://127.0.0.1:18084` as the public URL. Keep Gate bound
+Run Gate and Hermes on the same Linux machine. Download a matching Linux archive
+from [Gate releases](https://github.com/Ni-Agent/gate/releases) and follow the
+[native setup guide](https://github.com/Ni-Agent/gate/blob/main/SETUP.md) with `http://127.0.0.1:18084` as the public URL. Keep Gate bound
 to `127.0.0.1:18084`. The `gate-local setup` command creates the dedicated `agent:hermes` token at
 `~/.local/share/gate/config/hermes.token` by default (or
 `$GATE_HOME/config/hermes.token` for a custom instance). Use that existing token;
 do not run token creation again. In a private terminal, read the default file with
 `cat ~/.local/share/gate/config/hermes.token`, then enter it in the masked installer
-prompt. Install this plugin from your local source
-checkout using the Connect instructions above. Enter `http://127.0.0.1:18084`
+prompt. Install the plugin using the Connect instructions above. Enter `http://127.0.0.1:18084`
 and the dedicated token into the installer's masked token prompt. Keep the token
 out of chats, shell command arguments and repositories. HTTPS is required for a
 remote host; cleartext HTTP is accepted only for literal loopback addresses.

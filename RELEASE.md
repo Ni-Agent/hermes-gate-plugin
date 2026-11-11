@@ -32,16 +32,19 @@ Checksums use basenames and verify from the artifact directory. Confirm that
 
 # Publication reference
 
-Publication is a separate action. Choose a new empty GitHub repository and set its
-URL as `origin` (`git remote add origin <chosen-repository-url>`). Authenticate
-Git and GitHub CLI first. After reviewing the candidate, push the existing tag
+Publication is a separate action. The public repository is
+[Ni-Agent/hermes-gate-plugin](https://github.com/Ni-Agent/hermes-gate-plugin).
+Set its URL as `origin` if no origin exists:
+`git remote add origin https://github.com/Ni-Agent/hermes-gate-plugin.git`.
+If an origin already exists, verify it before publishing. Authenticate Git and
+GitHub CLI first. After reviewing the candidate, push the existing tag
 and publish the prerelease with these two commands:
 
 ```sh
 git push origin main "v$VERSION"
 gh release create "v$VERSION" "dist/hermes-gate-$VERSION.tar.gz" \
   "dist/hermes-gate-$VERSION.bundle" "dist/SHA256SUMS-$VERSION" \
-  --prerelease --title "Gate for Hermes $VERSION" --notes-file README.md
+  --repo Ni-Agent/hermes-gate-plugin --prerelease --title "Gate for Hermes $VERSION" --notes-file README.md
 ```
 
 Never move a published tag. Retain the tested source commit and checksums with the
