@@ -1,5 +1,6 @@
 name: gate
 version: "0.1.0-beta.1"
+requires_hermes: ">=0.21.6"
 kind: standalone
 manifest_version: 2
 api_version: 1
