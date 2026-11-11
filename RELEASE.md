@@ -11,7 +11,7 @@ git tag "v$VERSION"
 mkdir -p dist
 git archive --format=tar.gz --prefix=hermes-gate-plugin/ \
   -o "dist/hermes-gate-$VERSION.tar.gz" "v$VERSION"
-git bundle create "dist/hermes-gate-$VERSION.bundle" main "v$VERSION"
+git bundle create "dist/hermes-gate-$VERSION.bundle" HEAD main "v$VERSION"
 VERSION="$VERSION" python3 - <<'PY'
 import hashlib, os, pathlib
 version = os.environ['VERSION']
@@ -25,7 +25,7 @@ PY
 git bundle verify "dist/hermes-gate-$VERSION.bundle"
 ```
 
-The bundle includes `main` and the current release tag with complete history, so recipients
+The bundle advertises `HEAD` for a normal fresh clone and includes `main` and the current release tag with complete history, so recipients
 can clone and use the native installer. The source archive contains tracked files.
 Checksums use basenames and verify from the artifact directory. Confirm that
 `main`, `HEAD` and the version tag identify the same tested commit before packaging.
